@@ -5,7 +5,7 @@ import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION (ALIGNEMENT STRICT) ---
+# --- 1. CONFIGURATION (STRICTEMENT INCHANGÉE) ---
 st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
 
 try:
@@ -13,29 +13,29 @@ try:
 except AttributeError: pass
 else: ssl._create_default_https_context = _create_unverified_https_context
 
-feedparser.USER_AGENT = "Mozilla/5.0 (CercleInfraBot/1.0)"
+feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. LES 20 FLUX STRATÉGIQUES ---
+# --- 2. LES 20 FLUX (MIS À JOUR POUR ÉVITER LES ÉTATS "VIDE") ---
 FLUX_RSS = [
-    "https://world-nuclear-news.org/RSS/WNN-News-Feed",
-    "https://asia.nikkei.com/rss/feed/nar",
-    "https://african.business/category/sectors/infrastructure/feed/",
-    "https://www.construction-europe.com/rss/articles",
+    "https://news.google.com/rss/search?q=nuclear+energy+generation+SMR+iaea&hl=en&gl=US&ceid=US:en",
+    "https://asia.nikkei.com/rss/feed/nar", 
+    "https://news.google.com/rss/search?q=africa+infrastructure+investment+projects&hl=en&gl=ZA&ceid=ZA:en",
+    "https://news.google.com/rss/search?q=europe+construction+infrastructure+projects&hl=en&gl=GB&ceid=GB:en",
     "https://www.globalrailwayreview.com/feed/",
-    "https://www.waterworld.com/rss/articles",
-    "https://infrapppworld.com/feed",
-    "https://www.smart-energy.com/feed/",
-    "https://www.datacenterdynamics.com/en/feeds/news/",
-    "https://www.railwaygazette.com/139.rss",
-    "https://www.porttechnology.org/feed/",
+    "https://news.google.com/rss/search?q=water+infrastructure+desalination+networks&hl=en&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=infrastructure+finance+PPP+investment&hl=en&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=smart+grid+energy+transition+storage&hl=en&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=data+center+infrastructure+AI+consumption&hl=en&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=rail+infrastructure+high+speed+trains&hl=en&gl=GB&ceid=GB:en",
+    "https://news.google.com/rss/search?q=port+infrastructure+shipping+logistics&hl=en&gl=US&ceid=US:en",
     "https://www.enr.com/rss/articles",
     "https://www.power-technology.com/feed/",
     "https://www.renewableenergyworld.com/feed/",
-    "https://www.smartcitiesworld.net/news/rss",
+    "https://news.google.com/rss/search?q=smart+cities+urban+infrastructure&hl=en&gl=US&ceid=US:en",
     "https://www.globalconstructionreview.com/feed/",
-    "https://www.international-construction.com/rss/articles",
-    "https://www.shippingazette.com/rss/news.xml",
+    "https://news.google.com/rss/search?q=global+construction+megaprojects&hl=en&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=maritime+shipping+infrastructure&hl=en&gl=US&ceid=US:en",
     "https://www.offshore-energy.biz/feed/",
     "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr"
 ]
@@ -59,7 +59,7 @@ def recuperer_articles(flux_list, max_articles=3):
         except Exception: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION (FORMATAGE HTML STRICT - SANS MARKDOWN) ---
+# --- 4. GÉNÉRATION (FORMAT HTML STRICT - SANS MARKDOWN) ---
 def generer_newsletter(articles, api_key):
     client = genai.Client(api_key=api_key)
     ctx = "\n".join([f"ID:{i} | TITRE:{art['titre']} | DESC:{art['description']}" for i, art in enumerate(articles)])
@@ -70,12 +70,13 @@ def generer_newsletter(articles, api_key):
 
     IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. INTERDICTION D'UTILISER DU MARKDOWN (PAS DE ** OU DE ###).
     
-    1. LE BAROMÈTRE : Fournis les valeurs (EUA, Elec Spot, Brent, Acier).
+    1. LE BAROMÈTRE : Fournis impérativement les valeurs réelles pour :
+       🌿 Prix CO2 (EUA) | ⚡ Elec Spot (EU) | 🛢️ Brent ($) | 🏗️ Indice Acier.
        Format : <div class="barometre-grid"> avec 4 <div class="baro-card"> contenant <div class="baro-label"> et <div class="baro-value">.
     
     2. TITRE : <h2>[Titre]</h2>
     
-    3. ÉDITO : <div class="editorial">[Texte]</div>
+    3. ÉDITO : <div class="editorial">[Texte justifié]</div>
     
     4. LES 5 NEWS : Utilise impérativement cette structure pour chaque news :
     <div class="article">
@@ -88,10 +89,11 @@ def generer_newsletter(articles, api_key):
     5. IMPLICATIONS : <div class="implications"><h3>Perspectives stratégiques</h3><p>[Texte]</p></div>
     """
     
+    # Moteur 2.5 Flash selon vos quotas
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     return response.text
 
-# --- 5. STYLE (FORME HÉRITAGE - AUCUNE MODIFICATION) ---
+# --- 5. STYLE (FORME HÉRITAGE - VERROUILLÉE) ---
 def creer_html_complet(contenu_html):
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -107,7 +109,7 @@ def creer_html_complet(contenu_html):
         .baro-value {{ font-size: 18px; color: #0B1F38; font-weight: 800; }}
         h2 {{ font-size: 26px; color: #0B1F38; margin-bottom: 25px; font-weight: 800; text-align: center; }}
         .editorial {{ background-color: #f8fafc; padding: 20px; border-left: 4px solid #0B1F38; margin-bottom: 50px; font-style: italic; text-align: justify; }}
-        .article {{ margin-bottom: 50 : 0px; border-bottom: 1px solid #e2e8f0; padding-bottom: 30px; }}
+        .article {{ margin-bottom: 50px; border-bottom: 1px solid #e2e8f0; padding-bottom: 30px; }}
         .article-header {{ display: flex; align-items: baseline; gap: 15px; margin-bottom: 15px; }}
         .article-num {{ font-size: 40px; font-weight: 900; color: #D4AF37; line-height: 1; }}
         .article-title {{ font-size: 22px; color: #0B1F38; margin: 0; font-weight: 700; }}
@@ -126,7 +128,7 @@ def creer_html_complet(contenu_html):
     </div></body></html>
     """
 
-# --- 6. INTERFACE ---
+# --- 6. INTERFACE STREAMLIT ---
 st.title("🏛️ Cercle Infra : Production Hebdomadaire")
 
 if "GEMINI_API_KEY" in st.secrets:
@@ -147,6 +149,7 @@ if st.button("🚀 Lancer la production", use_container_width=True):
                 try:
                     html_body = generer_newsletter(articles, user_api_key)
                     final_output = creer_html_complet(html_body)
+                    st.success("Newsletter générée !")
                     st.download_button("📥 Télécharger la Newsletter", final_output, f"CercleInfra_Hebdo.html", "text/html")
                     st.components.v1.html(final_output, height=1200, scrolling=True)
                 except Exception as e:
