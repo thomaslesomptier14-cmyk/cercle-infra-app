@@ -6,7 +6,7 @@ import ssl
 import os
 
 # --- 1. CONFIGURATION (STRICTEMENT ALIGNÉE SUR TON APP.PY) ---
-st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
@@ -40,7 +40,7 @@ FLUX_RSS = [
     "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr"
 ]
 
-# --- 3. RÉCUPÉRATION AVEC LOGS ---
+# --- 3. RÉCUPÉRATION ---
 def recuperer_articles(flux_list, max_articles=3):
     articles = []
     logs = []
@@ -50,30 +50,36 @@ def recuperer_articles(flux_list, max_articles=3):
             if feed.entries:
                 logs.append(f"✅ {url} OK")
                 for entry in feed.entries[:max_articles]:
-                    articles.append({"titre": entry.title, "description": entry.description if hasattr(entry, 'description') else "", "lien": entry.link})
+                    articles.append({
+                        "titre": entry.title, 
+                        "description": entry.description if hasattr(entry, 'description') else "", 
+                        "lien": entry.link
+                    })
             else: logs.append(f"⚠️ {url} VIDE")
         except Exception: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION BROUILLON (ANTI-FOU & SANS MARKDOWN) ---
+# --- 4. GÉNÉRATION BROUILLON (SANS LE MOT "ARTICLE" + LIENS SOURCES) ---
 def generer_brouillon_html(articles, api_key):
     client = genai.Client(api_key=api_key)
-    ctx = "\n".join([f"TITRE:{art['titre']} | DESC:{art['description']}" for art in articles])
+    ctx = "\n".join([f"TITRE:{art['titre']} | DESC:{art['description']} | LIEN:{art['lien']}" for art in articles])
 
     prompt = f"""
     Rédige la veille hebdomadaire du 9 mars 2026 pour le think-tank '{NOM_ASSO}'. 
     Analyse ces news : {ctx}
 
-    IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. INTERDICTION STRICTE DU MARKDOWN (PAS DE **).
+    IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. INTERDICTION DU MARKDOWN (PAS DE **).
     
-    1. LE BAROMÈTRE (VALEURS FIXES) : Utilise exactement ces données :
+    1. LE BAROMÈTRE (VALEURS FIXES DU 09/03/2026) :
        🌿 Prix CO2 (EUA) : 75,20 € | ⚡ Elec Spot (EU) : 98,50 € | 🛢️ Brent ($) : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
        Format : <div class="barometre-grid"> avec 4 blocs <div class="baro-card">.
     
-    2. CHIFFRE CLÉ : Pour chaque news, extrais UN SEUL CHIFFRE massif.
+    2. CHIFFRE CLÉ : UN SEUL CHIFFRE massif par news.
        Format : <div class="article-highlight"><strong>[LE CHIFFRE]</strong> — [Contexte court]</div>
     
-    3. STRUCTURE : <h2>, <div class="editorial">, puis 5 <div class="article"> avec <span class="article-num">.
+    3. ARTICLES (STRUCTURE) : 
+       - Utilise <span class="article-num">[01 à 05]</span> (SANS écrire le mot "Article").
+       - Inclus impérativement <a href="[LIEN]" class="source-link">LIRE LA SOURCE ↗</a> à la fin de chaque texte.
     
     4. STYLE : Professionnel, texte JUSTIFIÉ, <strong> pour le gras.
     """
@@ -105,7 +111,6 @@ def creer_html_complet(contenu_html):
         .article-highlight strong {{ color: #D4AF37; font-weight: 800; text-transform: uppercase; }}
         .source-link {{ display: inline-block; color: #0B1F38; font-weight: 700; text-decoration: none; font-size: 12px; border-bottom: 1px solid #D4AF37; }}
         .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 8px; }}
-        .implications h3 {{ color: #D4AF37; margin-top: 0; text-transform: uppercase; font-size: 18px; }}
         .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a365d; }}
     </style></head>
     <body><div class="container">
@@ -115,7 +120,7 @@ def creer_html_complet(contenu_html):
     </div></body></html>
     """
 
-# --- 6. INTERFACE (CONTRÔLE & VALIDATION) ---
+# --- 6. INTERFACE ---
 st.title("🏛️ Cercle Infra : Production Hebdomadaire")
 
 if "GEMINI_API_KEY" in st.secrets:
@@ -123,28 +128,24 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     user_api_key = st.sidebar.text_input("Clé API Gemini :", type="password")
 
-if "draft" not in st.session_state: st.session_state.draft = ""
-if "scan_logs" not in st.session_state: st.session_state.scan_logs = []
+if "draft_final" not in st.session_state: st.session_state.draft_final = ""
+if "logs_final" not in st.session_state: st.session_state.logs_final = []
 
 if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
-    if not user_api_key:
-        st.error("Veuillez configurer votre clé API.")
-    else:
-        with st.spinner("Analyse stratégique en cours..."):
-            articles, logs = recuperer_articles(FLUX_RSS)
-            st.session_state.scan_logs = logs
-            st.session_state.draft = generer_brouillon_html(articles, user_api_key)
+    with st.spinner("Analyse stratégique en cours..."):
+        articles, logs = recuperer_articles(FLUX_RSS)
+        st.session_state.logs_final = logs
+        st.session_state.draft_final = generer_brouillon_html(articles, user_api_key)
 
-if st.session_state.draft:
-    st.markdown("### ✍️ Zone de Modification")
-    st.session_state.draft = st.text_area("Éditez le contenu HTML brut ici :", value=st.session_state.draft, height=450)
+if st.session_state.draft_final:
+    st.session_state.draft_final = st.text_area("✍️ Modifiez le contenu HTML brut :", value=st.session_state.draft_final, height=450)
     
     if st.button("✅ 2. Valider et Générer la Newsletter Finale", use_container_width=True, type="primary"):
-        final_html = creer_html_complet(st.session_state.draft)
+        final_html = creer_html_complet(st.session_state.draft_final)
         st.success("Newsletter prête !")
         st.download_button("📥 3. Télécharger le fichier final", final_html, "CercleInfra_Hebdo.html", "text/html")
         st.components.v1.html(final_html, height=1200, scrolling=True)
 
-if st.session_state.scan_logs:
+if st.session_state.logs_final:
     with st.expander("📊 Rapport technique du scan"):
-        for log in st.session_state.scan_logs: st.write(log)
+        for log in st.session_state.logs_final: st.write(log)
