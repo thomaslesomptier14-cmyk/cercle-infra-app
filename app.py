@@ -5,8 +5,8 @@ import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION & DESIGN (RESTAURATION STRICTE) ---
-st.set_page_config(page_title="Le Cercle Infra - Global 360", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION & STYLE (STRICTEMENT INCHANGÉ) ---
+st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
@@ -43,39 +43,44 @@ FLUX_RSS = [
 # --- 3. LOGIQUE MÉTIER ---
 def recuperer_articles(flux_list):
     articles = []
+    logs = []
     for url in flux_list:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:3]:
-                articles.append({
-                    "titre": entry.title, 
-                    "description": entry.description if hasattr(entry, 'description') else "",
-                    "lien": entry.link
-                })
-        except: pass
-    return articles
+            if feed.entries:
+                logs.append(f"✅ SUCCÈS : {url} ({len(feed.entries[:3])} articles)")
+                for entry in feed.entries[:3]:
+                    articles.append({
+                        "titre": entry.title, 
+                        "description": entry.description if hasattr(entry, 'description') else "",
+                        "lien": entry.link
+                    })
+            else:
+                logs.append(f"⚠️ VIDE : {url}")
+        except Exception as e:
+            logs.append(f"❌ ERREUR : {url} ({str(e)})")
+    return articles, logs
 
 def generer_brouillon(articles, api_key):
     try:
         client = genai.Client(api_key=api_key)
-        # RETOUR AU MODÈLE DE TON DASHBOARD
         model_id = "gemini-2.5-flash"
         
         ctx = "\n".join([f"TITRE:{a['titre']} | DESC:{a['description']}" for a in articles])
 
         prompt = f"""
-        Tu es l'analyste senior du think-tank '{NOM_ASSO}'. 
+        Rédige la veille stratégique pour le think-tank '{NOM_ASSO}'. 
         Analyse ces news d'infrastructure : {ctx}
 
         CONSIGNES :
         1. Sélectionne les 5 news les plus stratégiques mondialement.
-        2. Titres : Typographie française (Majuscule au début).
-        3. CHIFFRE CLÉ : Obligation absolue d'extraire un NOMBRE ($, %, GW, km).
-        4. TEXTE : Justifié, pro, expert. <strong> pour le gras. Pas d'astérisques.
+        2. Titres : Typographie française (Majuscule au début seulement).
+        3. CHIFFRE CLÉ : Obligation absolue d'extraire un NOMBRE précis ($, %, GW, km, ans).
+        4. TEXTE : Justifié, professionnel, expert. Utilise <strong> pour le gras. Pas d'astérisques (**).
 
-        FORMAT HTML :
-        - Inclus un tableau <table class="barometre"> avec Prix CO2, Elec, Brent, Acier.
-        - Utilise <div class="article"> avec <span class="article-num"> pour le numéro.
+        FORMAT HTML ATTENDU :
+        - Un tableau <table class="barometre"> avec Prix CO2, Elec, Brent, Acier.
+        - Chaque news dans un <div class="article"> avec <span class="article-num"> pour le numéro.
         """
         response = client.models.generate_content(model=model_id, contents=prompt)
         return response.text
@@ -102,12 +107,12 @@ def finaliser_html(corps_html):
         .article-title {{ font-size: 22px; color: #0B1F38; margin: 0; font-weight: 700; }}
         .article-text {{ color: #334155; line-height: 1.7; font-size: 15px; margin-bottom: 20px; text-align: justify; }}
         .article-highlight {{ background-color: #f8fafc; border-left: 4px solid #D4AF37; color: #0B1F38; padding: 15px 20px; font-weight: 500; margin-bottom: 20px; }}
-        .source-link {{ display: inline-block; color: #0B1F38; font-weight: 700; text-decoration: none; font-size: 12px; border-bottom: 1px solid #D4AF37; }}
+        .article-highlight strong {{ color: #D4AF37; font-weight: 800; text-transform: uppercase; }}
         .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 8px; }}
         .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }}
     </style></head>
     <body><div class="container">
-        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1><div class="date">Veille du {date_str}</div></div>
+        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1><div class="date">Édition du {date_str}</div></div>
         <div class="content">{corps_html}</div>
         <div class="footer">© {datetime.datetime.now().year} {NOM_ASSO} · Diffusion restreinte</div>
     </div></body></html>
@@ -116,7 +121,6 @@ def finaliser_html(corps_html):
 # --- 4. INTERFACE ---
 st.title("🏛️ Cercle Infra : Production Stratégique")
 
-# Utilise le NOM de ton secret ici
 if "GEMINI_API_KEY" in st.secrets:
     user_key = st.secrets["GEMINI_API_KEY"]
 else:
@@ -124,21 +128,29 @@ else:
 
 if "draft" not in st.session_state:
     st.session_state.draft = ""
+if "scan_logs" not in st.session_state:
+    st.session_state.scan_logs = []
 
-if st.button("🚀 Lancer la production (Moteur 2.5 Flash)", use_container_width=True):
+if st.button("🚀 Lancer la production", use_container_width=True):
     if not user_key:
-        st.error("Clé API manquante.")
+        st.error("Veuillez configurer votre clé API.")
     else:
-        with st.spinner("Scan des 20 flux mondiaux..."):
-            articles = recuperer_articles(FLUX_RSS)
+        with st.spinner("Analyse stratégique en cours..."):
+            articles, logs = recuperer_articles(FLUX_RSS)
+            st.session_state.scan_logs = logs
             st.session_state.draft = generer_brouillon(articles, user_key)
 
 if st.session_state.draft:
-    st.markdown("### ✍️ Révision Collaborative")
-    st.session_state.draft = st.text_area("Éditeur HTML :", value=st.session_state.draft, height=500)
+    st.session_state.draft = st.text_area("✍️ Brouillon à valider :", value=st.session_state.draft, height=500)
     
     if st.button("✅ Valider et Finaliser", use_container_width=True, type="primary"):
         final_html = finaliser_html(st.session_state.draft)
         st.success("Newsletter générée !")
-        st.download_button("📥 Télécharger le fichier final", final_html, f"Veille_CercleInfra.html", "text/html")
+        st.download_button("📥 Télécharger le fichier", final_html, f"Veille_CercleInfra.html", "text/html")
         st.components.v1.html(final_html, height=1000, scrolling=True)
+
+# --- SECTION LOGS (NOUVEAU) ---
+if st.session_state.scan_logs:
+    with st.expander("📊 Rapport technique du scan (20 flux)"):
+        for log in st.session_state.scan_logs:
+            st.write(log)
