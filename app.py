@@ -1,12 +1,13 @@
 import streamlit as st
 import feedparser
 from google import genai
+from google.genai import errors
 import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION (STRICTEMENT ALIGNÉE) ---
-st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION (ALIGNEMENT STRICT SUR TON APP.PY) ---
+st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
@@ -16,7 +17,7 @@ else: ssl._create_default_https_context = _create_unverified_https_context
 feedparser.USER_AGENT = "Mozilla/5.0 (CercleInfraBot/1.0)"
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. LES 20 FLUX ROBUSTES ---
+# --- 2. LES 20 FLUX STRATÉGIQUES (ROBUSTES) ---
 FLUX_RSS = [
     "https://news.google.com/rss/search?q=nuclear+energy+generation+SMR+iaea&hl=en&gl=US&ceid=US:en",
     "https://asia.nikkei.com/rss/feed/nar", 
@@ -50,43 +51,42 @@ def recuperer_articles(flux_list, max_articles=3):
             if feed.entries:
                 logs.append(f"✅ {url} OK")
                 for entry in feed.entries[:max_articles]:
-                    articles.append({
-                        "titre": entry.title, 
-                        "description": entry.description if hasattr(entry, 'description') else "", 
-                        "lien": entry.link
-                    })
+                    articles.append({"titre": entry.title, "description": entry.description if hasattr(entry, 'description') else "", "lien": entry.link})
             else: logs.append(f"⚠️ {url} VIDE")
         except Exception: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION BROUILLON (ZÉRO CONFLIT CSS) ---
+# --- 4. GÉNÉRATION BROUILLON (SÉCURISÉE) ---
 def generer_brouillon_html(articles, api_key):
     client = genai.Client(api_key=api_key)
     ctx = "\n".join([f"TITRE:{art['titre']} | DESC:{art['description']} | LIEN:{art['lien']}" for art in articles])
 
     prompt = f"""
-    Rédige le contenu pour '{NOM_ASSO}'. 
+    Rédige le contenu HTML pour '{NOM_ASSO}'. 
     Analyse ces news : {ctx}
 
-    IMPORTANT : NE GÉNÈRE JAMAIS DE BALISES <html>, <head>, <body> OU <style>.
-    RÉPONDS UNIQUEMENT AVEC LE CODE HTML DES ÉLÉMENTS CI-DESSOUS. AUCUN MARKDOWN.
+    IMPORTANT : NE GÉNÈRE PAS DE BALISES <html>, <head>, <body> OU <style>.
+    RÉPONDS UNIQUEMENT AVEC LE CODE HTML DES ÉLÉMENTS CI-DESSOUS. AUCUN MARKDOWN (PAS DE **).
     
     1. LE BAROMÈTRE (Valeurs du 09/03/2026) :
-       🌿 Prix CO2 (EUA) : 75,20 € | ⚡ Elec Spot (EU) : 98,50 € | 🛢️ Brent ($) : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
+       🌿 Prix CO2 : 75,20 € | ⚡ Elec Spot : 98,50 € | 🛢️ Brent : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
        Format : <div class="barometre-grid"> avec 4 blocs <div class="baro-card"> contenant <div class="baro-label"> et <div class="baro-value">.
     
-    2. ÉDITORIAL : <div class="editorial">[Texte analytique]</div>
+    2. ÉDITORIAL : <div class="editorial">[Texte analytique justifié]</div>
     
     3. ARTICLES (STRUCTURE STRICTE) : 
        <div class="article">
           <div class="article-header"><span class="article-num">[01 à 05]</span><h3 class="article-title">[Titre]</h3></div>
           <div class="article-text">[Analyse]</div>
-          <div class="article-highlight"><strong>[CHIFFRE UNIQUE]</strong> — [Contexte]</div>
+          <div class="article-highlight"><strong>[CHIFFRE UNIQUE]</strong> — [Contexte court]</div>
           <a href="[LIEN]" class="source-link">LIRE LA SOURCE ↗</a>
        </div>
     """
-    response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-    return response.text
+    try:
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        return response.text
+    except errors.ClientError as e:
+        return f"ERREUR_CRITIQUE_API: {str(e)}"
 
 # --- 5. STYLE (TON CSS EXACT DE APP.PY - VERROUILLÉ) ---
 def creer_html_complet(contenu_html):
@@ -131,17 +131,31 @@ else:
     user_api_key = st.sidebar.text_input("Clé API Gemini :", type="password")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
+if "scan_logs" not in st.session_state: st.session_state.scan_logs = []
 
 if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
-    with st.spinner("Analyse stratégique en cours..."):
-        articles, logs = recuperer_articles(FLUX_RSS)
-        st.session_state.draft = generer_brouillon_html(articles, user_api_key)
+    if not user_api_key:
+        st.error("Veuillez configurer votre clé API.")
+    else:
+        with st.spinner("Analyse stratégique en cours..."):
+            articles, logs = recuperer_articles(FLUX_RSS)
+            st.session_state.scan_logs = logs
+            res = generer_brouillon_html(articles, user_api_key)
+            if "ERREUR_CRITIQUE_API" in res:
+                st.error(f"L'API a rejeté la clé ou le modèle : {res}")
+            else:
+                st.session_state.draft = res
 
 if st.session_state.draft:
-    st.session_state.draft = st.text_area("✍️ Brouillon HTML :", value=st.session_state.draft, height=450)
+    st.markdown("### ✍️ Zone de Modification")
+    st.session_state.draft = st.text_area("Éditez le contenu HTML brut ici :", value=st.session_state.draft, height=450)
     
-    if st.button("✅ 2. Valider et Finaliser", use_container_width=True, type="primary"):
+    if st.button("✅ 2. Valider et Générer la Newsletter Finale", use_container_width=True, type="primary"):
         final_html = creer_html_complet(st.session_state.draft)
         st.success("Newsletter prête !")
-        st.download_button("📥 3. Télécharger le fichier", final_html, "CercleInfra_Hebdo.html", "text/html")
+        st.download_button("📥 3. Télécharger le fichier final", final_html, "CercleInfra_Hebdo.html", "text/html")
         st.components.v1.html(final_html, height=1200, scrolling=True)
+
+if st.session_state.scan_logs:
+    with st.expander("📊 Rapport technique du scan"):
+        for log in st.session_state.scan_logs: st.write(log)
