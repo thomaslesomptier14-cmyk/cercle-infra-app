@@ -5,7 +5,7 @@ import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION (STRICTEMENT ALIGNÉE SUR TON APP.PY) ---
+# --- 1. CONFIGURATION (STRICTEMENT ALIGNÉE) ---
 st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
 
 try:
@@ -16,7 +16,7 @@ else: ssl._create_default_https_context = _create_unverified_https_context
 feedparser.USER_AGENT = "Mozilla/5.0 (CercleInfraBot/1.0)"
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. LES 20 FLUX STRATÉGIQUES (ROBUSTES) ---
+# --- 2. LES 20 FLUX ROBUSTES ---
 FLUX_RSS = [
     "https://news.google.com/rss/search?q=nuclear+energy+generation+SMR+iaea&hl=en&gl=US&ceid=US:en",
     "https://asia.nikkei.com/rss/feed/nar", 
@@ -59,29 +59,31 @@ def recuperer_articles(flux_list, max_articles=3):
         except Exception: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION BROUILLON (SANS LE MOT "ARTICLE" + LIENS SOURCES) ---
+# --- 4. GÉNÉRATION BROUILLON (ZÉRO CONFLIT CSS) ---
 def generer_brouillon_html(articles, api_key):
     client = genai.Client(api_key=api_key)
     ctx = "\n".join([f"TITRE:{art['titre']} | DESC:{art['description']} | LIEN:{art['lien']}" for art in articles])
 
     prompt = f"""
-    Rédige la veille hebdomadaire du 9 mars 2026 pour le think-tank '{NOM_ASSO}'. 
+    Rédige le contenu pour '{NOM_ASSO}'. 
     Analyse ces news : {ctx}
 
-    IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. INTERDICTION DU MARKDOWN (PAS DE **).
+    IMPORTANT : NE GÉNÈRE JAMAIS DE BALISES <html>, <head>, <body> OU <style>.
+    RÉPONDS UNIQUEMENT AVEC LE CODE HTML DES ÉLÉMENTS CI-DESSOUS. AUCUN MARKDOWN.
     
-    1. LE BAROMÈTRE (VALEURS FIXES DU 09/03/2026) :
+    1. LE BAROMÈTRE (Valeurs du 09/03/2026) :
        🌿 Prix CO2 (EUA) : 75,20 € | ⚡ Elec Spot (EU) : 98,50 € | 🛢️ Brent ($) : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
-       Format : <div class="barometre-grid"> avec 4 blocs <div class="baro-card">.
+       Format : <div class="barometre-grid"> avec 4 blocs <div class="baro-card"> contenant <div class="baro-label"> et <div class="baro-value">.
     
-    2. CHIFFRE CLÉ : UN SEUL CHIFFRE massif par news.
-       Format : <div class="article-highlight"><strong>[LE CHIFFRE]</strong> — [Contexte court]</div>
+    2. ÉDITORIAL : <div class="editorial">[Texte analytique]</div>
     
-    3. ARTICLES (STRUCTURE) : 
-       - Utilise <span class="article-num">[01 à 05]</span> (SANS écrire le mot "Article").
-       - Inclus impérativement <a href="[LIEN]" class="source-link">LIRE LA SOURCE ↗</a> à la fin de chaque texte.
-    
-    4. STYLE : Professionnel, texte JUSTIFIÉ, <strong> pour le gras.
+    3. ARTICLES (STRUCTURE STRICTE) : 
+       <div class="article">
+          <div class="article-header"><span class="article-num">[01 à 05]</span><h3 class="article-title">[Titre]</h3></div>
+          <div class="article-text">[Analyse]</div>
+          <div class="article-highlight"><strong>[CHIFFRE UNIQUE]</strong> — [Contexte]</div>
+          <a href="[LIEN]" class="source-link">LIRE LA SOURCE ↗</a>
+       </div>
     """
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     return response.text
@@ -128,24 +130,18 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     user_api_key = st.sidebar.text_input("Clé API Gemini :", type="password")
 
-if "draft_final" not in st.session_state: st.session_state.draft_final = ""
-if "logs_final" not in st.session_state: st.session_state.logs_final = []
+if "draft" not in st.session_state: st.session_state.draft = ""
 
 if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
     with st.spinner("Analyse stratégique en cours..."):
         articles, logs = recuperer_articles(FLUX_RSS)
-        st.session_state.logs_final = logs
-        st.session_state.draft_final = generer_brouillon_html(articles, user_api_key)
+        st.session_state.draft = generer_brouillon_html(articles, user_api_key)
 
-if st.session_state.draft_final:
-    st.session_state.draft_final = st.text_area("✍️ Modifiez le contenu HTML brut :", value=st.session_state.draft_final, height=450)
+if st.session_state.draft:
+    st.session_state.draft = st.text_area("✍️ Brouillon HTML :", value=st.session_state.draft, height=450)
     
-    if st.button("✅ 2. Valider et Générer la Newsletter Finale", use_container_width=True, type="primary"):
-        final_html = creer_html_complet(st.session_state.draft_final)
+    if st.button("✅ 2. Valider et Finaliser", use_container_width=True, type="primary"):
+        final_html = creer_html_complet(st.session_state.draft)
         st.success("Newsletter prête !")
-        st.download_button("📥 3. Télécharger le fichier final", final_html, "CercleInfra_Hebdo.html", "text/html")
+        st.download_button("📥 3. Télécharger le fichier", final_html, "CercleInfra_Hebdo.html", "text/html")
         st.components.v1.html(final_html, height=1200, scrolling=True)
-
-if st.session_state.logs_final:
-    with st.expander("📊 Rapport technique du scan"):
-        for log in st.session_state.logs_final: st.write(log)
