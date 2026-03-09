@@ -16,9 +16,10 @@ except AttributeError:
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 
-feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+feedparser.USER_AGENT = "Mozilla/5.0 (CercleInfraBot/1.0)"
+NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. LES 20 FLUX DIVERSIFIÉS ---
+# --- 2. LES 20 FLUX STRATÉGIQUES ---
 FLUX_RSS = [
     "https://world-nuclear-news.org/RSS/WNN-News-Feed",
     "https://asia.nikkei.com/rss/feed/nar",
@@ -42,8 +43,6 @@ FLUX_RSS = [
     "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr"
 ]
 
-NOM_ASSO = "LE CERCLE INFRA"
-
 # --- 3. RÉCUPÉRATION AVEC LOGS ---
 def recuperer_articles(flux_list, max_articles=3):
     articles = []
@@ -63,19 +62,18 @@ def recuperer_articles(flux_list, max_articles=3):
         except Exception as e: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION (PROMPT AVEC BAROMÈTRE AMÉLIORÉ) ---
+# --- 4. GÉNÉRATION (PROMPT NEUTRE + BAROMÈTRE GRID) ---
 def generer_newsletter(articles, api_key):
     client = genai.Client(api_key=api_key)
-    ctx = "\n".join([f"ID:{i} | TITRE:{a['titre']} | DESC:{a['description']}" for i, a in enumerate(articles)])
+    ctx = "\n".join([f"ID:{i} | TITRE:{art['titre']} | DESC:{art['description']}" for i, art in enumerate(articles)])
 
     prompt = f"""
     Rédige la veille stratégique pour le think-tank '{NOM_ASSO}'. 
     Analyse ces news d'infrastructure : {ctx}
 
-    1. LE BAROMÈTRE (AMÉLIORÉ) : Génère un conteneur <div class="barometre-grid"> contenant 4 blocs <div class="baro-card"> :
+    1. LE BAROMÈTRE (GRILLE) : Génère un conteneur <div class="barometre-grid"> contenant 4 blocs <div class="baro-card"> :
        - 🌿 Prix CO2 (EUA) | ⚡ Elec Spot (EU) | 🛢️ Brent ($) | 🏗️ Indice Acier.
-       Chaque bloc doit afficher le nom et une valeur estimée.
-
+    
     2. LES 5 NEWS : 
     <div class="article">
         <div class="article-header"><span class="article-num">[N°]</span><h3 class="article-title">[Titre]</h3></div>
@@ -90,7 +88,6 @@ def generer_newsletter(articles, api_key):
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     raw_html = response.text
     
-    # Gestion du graphique
     chart_url = "https://quickchart.io/chart?c={type:'bar',data:{labels:['A','B','C'],datasets:[{label:'Infra',data:[10,20,30],backgroundColor:'#0B1F38'}]}}"
     if "[CHART_DATA:" in raw_html:
         try:
@@ -105,7 +102,7 @@ def generer_newsletter(articles, api_key):
     chart_html = f'<div style="text-align: center; margin: 40px 0;"><img src="{chart_url}" width="100%" style="max-width: 600px; border-radius: 8px;"></div>'
     return raw_html + chart_html
 
-# --- 5. STYLE (FORME INCHANGÉE + AMÉLIORATION BAROMÈTRE) ---
+# --- 5. STYLE (VOTRE FORME EXACTE + GRID) ---
 def creer_html_complet(contenu_html):
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -116,7 +113,6 @@ def creer_html_complet(contenu_html):
         .logo-text {{ font-size: 32px; font-weight: 800; color: #D4AF37; letter-spacing: 3px; text-transform: uppercase; margin: 0; }}
         .content {{ padding: 40px; }}
         
-        /* --- LE NOUVEAU BAROMÈTRE --- */
         .barometre-grid {{ display: flex; gap: 15px; margin-bottom: 40px; justify-content: space-between; }}
         .baro-card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-top: 4px solid #D4AF37; padding: 15px; flex: 1; text-align: center; border-radius: 4px; }}
         .baro-label {{ font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }}
@@ -131,8 +127,7 @@ def creer_html_complet(contenu_html):
         .article-text {{ color: #334155; line-height: 1.7; text-align: justify; font-size: 15px; }}
         .article-highlight {{ background-color: #f8fafc; border-left: 4px solid #D4AF37; color: #0B1F38; padding: 15px 20px; font-weight: 500; margin-bottom: 20px; }}
         .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 8px; }}
-        .implications h3 {{ color: #D4AF37; margin: 0 0 10px 0; text-transform: uppercase; }}
-        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a365d; }}
+        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; }}
     </style></head>
     <body><div class="container">
         <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1></div>
@@ -141,22 +136,34 @@ def creer_html_complet(contenu_html):
     </div></body></html>
     """
 
-# --- 6. INTERFACE ---
+# --- 6. INTERFACE (AUCUNE CLÉ HARDCODÉE) ---
 st.title("🏛️ Cercle Infra : Production Stratégique")
-user_api_key = st.text_input("Clé API Gemini :", type="password", value="AIzaSyBq8v1PYc6D-PqLyqIQ3tZiNSz_wRyyGMY")
+
+# On vérifie d'abord les secrets Streamlit
+if "GEMINI_API_KEY" in st.secrets:
+    user_api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    # Sinon on demande la clé (vide par défaut pour la sécurité)
+    user_api_key = st.sidebar.text_input("Clé API Gemini :", type="password")
 
 if "scan_logs" not in st.session_state: st.session_state.scan_logs = []
 
 if st.button("🚀 Lancer la production", use_container_width=True):
-    with st.spinner("Scan mondial et analyse en cours..."):
-        articles, logs = recuperer_articles(FLUX_RSS)
-        st.session_state.scan_logs = logs
-        if articles:
-            html_body = generer_newsletter(articles, user_api_key)
-            final_output = creer_html_complet(html_body)
-            st.download_button("📥 Télécharger la Veille", final_output, f"CercleInfra_Veille.html", "text/html")
-            st.components.v1.html(final_output, height=1200, scrolling=True)
+    if not user_api_key:
+        st.error("Veuillez saisir votre clé API dans la barre latérale.")
+    else:
+        with st.spinner("Scan mondial et analyse en cours..."):
+            articles, logs = recuperer_articles(FLUX_RSS)
+            st.session_state.scan_logs = logs
+            if articles:
+                try:
+                    html_body = generer_newsletter(articles, user_api_key)
+                    final_output = creer_html_complet(html_body)
+                    st.download_button("📥 Télécharger le fichier", final_output, f"CercleInfra_Veille.html", "text/html")
+                    st.components.v1.html(final_output, height=1200, scrolling=True)
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
 
 if st.session_state.scan_logs:
-    with st.expander("📊 Rapport technique du scan (20 flux)"):
+    with st.expander("📊 Rapport technique du scan"):
         for log in st.session_state.scan_logs: st.write(log)
