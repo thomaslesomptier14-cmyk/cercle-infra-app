@@ -5,8 +5,8 @@ import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION (VERROUILLÉE) ---
-st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION (STRICTEMENT ALIGNÉE SUR TON APP.PY) ---
+st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
@@ -40,7 +40,7 @@ FLUX_RSS = [
     "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr"
 ]
 
-# --- 3. RÉCUPÉRATION ---
+# --- 3. RÉCUPÉRATION AVEC LOGS ---
 def recuperer_articles(flux_list, max_articles=3):
     articles = []
     logs = []
@@ -55,7 +55,7 @@ def recuperer_articles(flux_list, max_articles=3):
         except Exception: logs.append(f"❌ {url} ERR")
     return articles, logs
 
-# --- 4. GÉNÉRATION DU BROUILLON HTML ---
+# --- 4. GÉNÉRATION BROUILLON (ANTI-FOU & SANS MARKDOWN) ---
 def generer_brouillon_html(articles, api_key):
     client = genai.Client(api_key=api_key)
     ctx = "\n".join([f"TITRE:{art['titre']} | DESC:{art['description']}" for art in articles])
@@ -64,21 +64,23 @@ def generer_brouillon_html(articles, api_key):
     Rédige la veille hebdomadaire du 9 mars 2026 pour le think-tank '{NOM_ASSO}'. 
     Analyse ces news : {ctx}
 
-    IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. AUCUN MARKDOWN.
+    IMPORTANT : RÉPONDS UNIQUEMENT EN HTML. INTERDICTION STRICTE DU MARKDOWN (PAS DE **).
     
-    1. LE BAROMÈTRE (STABILITÉ) : Valeurs fixes pour le 09/03/2026 :
-       🌿 Prix CO2 : 75,20 € | ⚡ Elec Spot : 98,50 € | 🛢️ Brent : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
-       Format : <div class="barometre-grid"> avec 4 <div class="baro-card">.
+    1. LE BAROMÈTRE (VALEURS FIXES) : Utilise exactement ces données :
+       🌿 Prix CO2 (EUA) : 75,20 € | ⚡ Elec Spot (EU) : 98,50 € | 🛢️ Brent ($) : 92,15 $ | 🏗️ Indice Acier : 155,70 pts.
+       Format : <div class="barometre-grid"> avec 4 blocs <div class="baro-card">.
     
-    2. CHIFFRE CLÉ : UN SEUL CHIFFRE massif par news.
-       Format : <div class="article-highlight"><strong>[CHIFFRE]</strong> — [Contexte]</div>
+    2. CHIFFRE CLÉ : Pour chaque news, extrais UN SEUL CHIFFRE massif.
+       Format : <div class="article-highlight"><strong>[LE CHIFFRE]</strong> — [Contexte court]</div>
     
-    3. PAS DE GRAPHIQUE. TEXTE JUSTIFIÉ. <strong> POUR LE GRAS.
+    3. STRUCTURE : <h2>, <div class="editorial">, puis 5 <div class="article"> avec <span class="article-num">.
+    
+    4. STYLE : Professionnel, texte JUSTIFIÉ, <strong> pour le gras.
     """
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     return response.text
 
-# --- 5. STYLE (FORME HÉRITAGE VERROUILLÉE) ---
+# --- 5. STYLE (TON CSS EXACT DE APP.PY - VERROUILLÉ) ---
 def creer_html_complet(contenu_html):
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -101,8 +103,10 @@ def creer_html_complet(contenu_html):
         .article-text {{ color: #334155; line-height: 1.7; text-align: justify; font-size: 15px; }}
         .article-highlight {{ background-color: #f8fafc; border-left: 4px solid #D4AF37; color: #0B1F38; padding: 15px 20px; font-weight: 500; margin-bottom: 20px; }}
         .article-highlight strong {{ color: #D4AF37; font-weight: 800; text-transform: uppercase; }}
+        .source-link {{ display: inline-block; color: #0B1F38; font-weight: 700; text-decoration: none; font-size: 12px; border-bottom: 1px solid #D4AF37; }}
         .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 8px; }}
-        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; }}
+        .implications h3 {{ color: #D4AF37; margin-top: 0; text-transform: uppercase; font-size: 18px; }}
+        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a365d; }}
     </style></head>
     <body><div class="container">
         <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1></div>
@@ -111,7 +115,7 @@ def creer_html_complet(contenu_html):
     </div></body></html>
     """
 
-# --- 6. INTERFACE (SYSTÈME À DEUX ÉTAPES) ---
+# --- 6. INTERFACE (CONTRÔLE & VALIDATION) ---
 st.title("🏛️ Cercle Infra : Production Hebdomadaire")
 
 if "GEMINI_API_KEY" in st.secrets:
@@ -122,27 +126,24 @@ else:
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "scan_logs" not in st.session_state: st.session_state.scan_logs = []
 
-# ÉTAPE 1 : GÉNÉRATION DU BROUILLON
 if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
     if not user_api_key:
-        st.error("Clé API manquante.")
+        st.error("Veuillez configurer votre clé API.")
     else:
-        with st.spinner("Collecte des données et rédaction..."):
+        with st.spinner("Analyse stratégique en cours..."):
             articles, logs = recuperer_articles(FLUX_RSS)
             st.session_state.scan_logs = logs
             st.session_state.draft = generer_brouillon_html(articles, user_api_key)
 
-# ÉTAPE 2 : VALIDATION ET FINALISATION
 if st.session_state.draft:
-    st.markdown("### ✍️ Zone de Validation")
-    st.session_state.draft = st.text_area("Modifiez le contenu HTML ici avant finalisation :", 
-                                          value=st.session_state.draft, height=450)
+    st.markdown("### ✍️ Zone de Modification")
+    st.session_state.draft = st.text_area("Éditez le contenu HTML brut ici :", value=st.session_state.draft, height=450)
     
     if st.button("✅ 2. Valider et Générer la Newsletter Finale", use_container_width=True, type="primary"):
-        final_output = creer_html_complet(st.session_state.draft)
-        st.success("Newsletter validée !")
-        st.download_button("📥 3. Télécharger le fichier final", final_output, f"CercleInfra_Hebdo.html", "text/html")
-        st.components.v1.html(final_output, height=1200, scrolling=True)
+        final_html = creer_html_complet(st.session_state.draft)
+        st.success("Newsletter prête !")
+        st.download_button("📥 3. Télécharger le fichier final", final_html, "CercleInfra_Hebdo.html", "text/html")
+        st.components.v1.html(final_html, height=1200, scrolling=True)
 
 if st.session_state.scan_logs:
     with st.expander("📊 Rapport technique du scan"):
