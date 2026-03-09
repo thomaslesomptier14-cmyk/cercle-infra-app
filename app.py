@@ -3,13 +3,16 @@ import feedparser
 from google import genai
 import datetime
 import ssl
-import urllib.parse
-import re
+import os
 
 # --- CONFIGURATION PAGE ---
-st.set_page_config(page_title="Le Cercle Infra - Intelligence", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
 
-# Déblocage SSL pour Mac
+# Dossier pour les archives
+if not os.path.exists("archives"):
+    os.makedirs("archives")
+
+# Déblocage SSL
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError: pass
@@ -17,139 +20,120 @@ else: ssl._create_default_https_context = _create_unverified_https_context
 
 feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# --- 1. SOURCES INTERNATIONALES ÉLARGIES ---
+# --- 1. SOURCES (INCLUANT SIGNAUX FAIBLES) ---
 FLUX_RSS = [
-    "https://www.enr.com/rss/articles", # USA - Méga-projets
-    "https://www.renewableenergyworld.com/feed/", # Global - Énergie
-    "https://www.masstransitmag.com/rss", # Global - Transports
-    "https://elpais.com/rss/economia/macroeconomia.xml", # Espagne - Macro/Infra
-    "https://www.faz.net/rss/aktuell/wirtschaft/unternehmen/", # Allemagne - Industrie
-    "https://news.google.com/rss/search?q=infrastructure+energy+nuclear+funding&hl=en-US&gl=US&ceid=US:en" # Google News Global
+    "https://www.construction-europe.com/rss/articles", 
+    "https://www.railwaygazette.com/139.rss",
+    "https://www.smart-energy.com/feed/",
+    "https://news.google.com/rss/search?q=infrastructure+tenders+funding+projects+nuclear&hl=fr&gl=FR&ceid=FR:fr"
 ]
 
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. RÉCUPÉRATION DES ARTICLES ---
-def recuperer_articles(flux_list, max_articles=10):
+# --- 2. FONCTIONS DE RÉCUPÉRATION ET GÉNÉRATION ---
+def recuperer_articles(flux_list):
     articles = []
     for url in flux_list:
         try:
             feed = feedparser.parse(url)
-            if not feed.entries: continue
-            for entry in feed.entries[:max_articles]:
-                articles.append({
-                    "titre": entry.title,
-                    "description": entry.description if hasattr(entry, 'description') else "",
-                    "lien": entry.link
-                })
-        except Exception: pass
+            for entry in feed.entries[:8]:
+                articles.append({"titre": entry.title, "description": entry.description, "lien": entry.link})
+        except: pass
     return articles
 
-# --- 3. GÉNÉRATION PAR L'IA ---
-def generer_newsletter(articles, api_key):
+def generer_draft(articles, api_key):
     client = genai.Client(api_key=api_key)
-    
-    ctx = ""
-    for i, art in enumerate(articles):
-        ctx += f"ID:{i} | TITRE:{art['titre']} | DESC:{art['description']}\n\n"
+    ctx = "\n".join([f"TITRE:{a['titre']} | DESC:{a['description']}" for a in articles])
 
     prompt = f"""
-    Tu es l'analyste senior du think-tank '{NOM_ASSO}'. 
-    Analyse ces news d'infrastructure mondiales (Anglais, Espagnol, Allemand) : {ctx}
-
-    CONSIGNES DE RÉDACTION (FRANÇAIS) :
-    1. Sélectionne les 5 news les plus stratégiques.
-    2. TYPOGRAPHIE : Majuscule uniquement au début du titre (ex: "Le projet avance" et non "Le Projet Avance").
-    3. CHIFFRE CLÉ : Obligation d'extraire un NOMBRE réel ($, %, GW, km). Sois précis.
-    4. FORMATAGE : Texte JUSTIFIÉ. Utilise <strong> pour le gras. JAMAIS d'astérisques (**).
-    5. DATA VIZ : Génère 3 catégories et 3 valeurs numériques issues des actualités.
-       Format : [CHART_DATA: Categorie1,Valeur1|Categorie2,Valeur2|Categorie3,Valeur3]
-
-    STRUCTURE HTML :
-    <h2>[Titre Semaine]</h2>
-    <div class="editorial">[Édito analytique justifié]</div>
+    Tu es l'analyste senior du '{NOM_ASSO}'. Rédige une veille stratégique mondiale en FRANÇAIS.
     
-    [Pour chaque article 01 à 05] :
-    <div class="article">
-        <div class="article-header"><span class="article-num">[N°]</span><h3 class="article-title">[Titre]</h3></div>
-        <div class="article-text">[Analyse fluide, justifiée, avec <strong> et éventuellement <ul><li>]</div>
-        <div class="article-highlight"><strong>CHIFFRE CLÉ :</strong> [Valeur numérique] — [Contexte]</div>
-        <a href="[LIEN]" class="source-link" target="_blank">LIRE LA SOURCE ↗</a>
-    </div>
-
-    <div class="implications"><h3>Perspectives stratégiques</h3><p>[Analyse finale justifiée]</p></div>
+    SECTION 1 : LE BAROMÈTRE DU CERCLE
+    Crée un tableau HTML simple avec 3 indicateurs de marché estimés ou réels (ex: Prix CO2, Électricité Spot, Brent).
+    
+    SECTION 2 : LES 5 ACTUALITÉS CRITIQUES (DIVERSITÉ MONDIALE)
+    - 5 news max (Europe, Asie, Afrique, Amériques).
+    - Pour chaque news : Titre typo française, Analyse experte justifiée, CHIFFRE CLÉ obligatoire.
+    - Utilise <strong> pour le gras. PAS d'astérisques (**). 
+    - Texte JUSTIFIÉ (text-align: justify).
+    
+    SECTION 3 : PERSPECTIVES STRATÉGIQUES
+    Analyse prospective finale.
     """
-    
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-    raw_html = response.text
-    
-    # --- FIX CHART ERROR : Traitement Python du graphique ---
-    chart_url = "https://quickchart.io/chart?c={type:'bar',data:{labels:['Projets','Invest.','R&D'],datasets:[{label:'Secteur',data:[40,60,30],backgroundColor:'#0B1F38'}]}}"
-    match = re.search(r"\[CHART_DATA:\s*(.*?)\]", raw_html)
-    if match:
-        try:
-            data_str = match.group(1)
-            pairs = [p.split(",") for p in data_str.split("|")]
-            labels = [p[0].strip() for p in pairs]
-            values = [p[1].strip() for p in pairs]
-            config = f"{{type:'bar',data:{{labels:{labels},datasets:[{{label:'Indicateurs Hebdomadaires',data:[{','.join(values)}],backgroundColor:'#0B1F38'}}]}}}}"
-            chart_url = f"https://quickchart.io/chart?c={urllib.parse.quote(config)}"
-            raw_html = raw_html.replace(match.group(0), "") # Nettoyage du tag
-        except: pass
+    return response.text
 
-    chart_html = f'<div style="text-align: center; margin: 40px 0;"><img src="{chart_url}" width="100%" style="max-width: 600px; border-radius: 8px; border: 1px solid #e2e8f0;"></div>'
-    return raw_html + chart_html
-
-# --- 4. CRÉATION DU TEMPLATE NAVY & GOLD ---
-def creer_html_complet(contenu_html):
+def finaliser_html(corps_html):
+    date_str = datetime.datetime.now().strftime('%d/%m/%Y')
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     <style>
         body {{ font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: auto; padding: 20px; color: #1f2937; background-color: #f3f4f6; }}
         .container {{ background-color: #ffffff; border-radius: 4px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }}
-        .header {{ background-color: #0B1F38; padding: 35px 20px; text-align: center; border-bottom: 5px solid #D4AF37; }}
-        .logo-text {{ font-size: 32px; font-weight: 800; color: #D4AF37; letter-spacing: 3px; margin: 0; text-transform: uppercase; }}
-        .date {{ font-size: 13px; font-weight: 600; color: #ffffff; text-transform: uppercase; margin-top: 8px; opacity: 0.8; }}
-        .content {{ padding: 45px; }}
-        h2 {{ font-size: 26px; color: #0B1F38; margin-bottom: 25px; font-weight: 800; text-align: center; }}
-        .editorial {{ background-color: #f8fafc; padding: 20px 25px; border-left: 5px solid #0B1F38; margin-bottom: 50px; font-style: italic; color: #475569; text-align: justify; line-height: 1.6; }}
-        .article {{ margin-bottom: 60px; border-bottom: 1px solid #e2e8f0; padding-bottom: 35px; }}
-        .article-header {{ display: flex; align-items: baseline; gap: 15px; margin-bottom: 15px; }}
-        .article-num {{ font-size: 45px; font-weight: 900; color: #D4AF37; line-height: 1; opacity: 0.9; }}
-        .article-title {{ font-size: 24px; color: #0B1F38; margin: 0; font-weight: 700; line-height: 1.2; }}
-        .article-text {{ color: #334155; line-height: 1.7; font-size: 15px; margin-bottom: 20px; text-align: justify; }}
-        .article-highlight {{ background-color: #f8fafc; border-left: 5px solid #D4AF37; color: #0B1F38; padding: 15px 20px; font-weight: 500; margin: 25px 0; }}
-        .article-highlight strong {{ color: #D4AF37; font-weight: 800; text-transform: uppercase; }}
-        .source-link {{ display: inline-block; color: #0B1F38; font-weight: 700; text-decoration: none; font-size: 12px; border: 1px solid #D4AF37; padding: 8px 15px; border-radius: 2px; }}
-        .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 4px; margin-top: 30px; }}
-        .implications h3 {{ color: #D4AF37; margin-top: 0; text-transform: uppercase; font-size: 18px; border-bottom: 1px solid #1a365d; padding-bottom: 10px; }}
-        .implications p {{ text-align: justify; margin: 0; line-height: 1.6; }}
-        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; }}
+        .header {{ background-color: #0B1F38; padding: 35px; text-align: center; border-bottom: 5px solid #D4AF37; }}
+        .logo-text {{ font-size: 32px; font-weight: 800; color: #D4AF37; letter-spacing: 3px; text-transform: uppercase; margin: 0; }}
+        .content {{ padding: 45px; text-align: justify; }}
+        h2 {{ font-size: 24px; color: #0B1F38; text-align: center; margin-bottom: 30px; }}
+        .barometre {{ width: 100%; border-collapse: collapse; margin-bottom: 40px; background: #f8fafc; border: 1px solid #e2e8f0; }}
+        .barometre td {{ padding: 15px; border: 1px solid #e2e8f0; text-align: center; font-size: 14px; }}
+        .article {{ margin-bottom: 50px; border-bottom: 1px solid #eee; padding-bottom: 30px; }}
+        .article-num {{ font-size: 40px; font-weight: 900; color: #D4AF37; line-height: 1; }}
+        .article-highlight {{ background-color: #f8fafc; border-left: 5px solid #D4AF37; padding: 15px; margin: 20px 0; }}
+        .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 4px; }}
+        .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 20px; font-size: 11px; }}
     </style></head>
     <body><div class="container">
-        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1><div class="date">Édition du {datetime.datetime.now().strftime('%d/%m/%Y')}</div></div>
-        <div class="content">{contenu_html}</div>
-        <div class="footer">© {datetime.datetime.now().year} {NOM_ASSO} · Diffusion restreinte</div>
+        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1><div style="color:white; margin-top:5px;">Veille Stratégique • {date_str}</div></div>
+        <div class="content">{corps_html}</div>
+        <div class="footer">© {datetime.datetime.now().year} {NOM_ASSO} • DOCUMENT STRICTEMENT RÉSERVÉ</div>
     </div></body></html>
     """
 
-# --- 5. INTERFACE ET GESTION SECRETS ---
-st.title("🏛️ Intelligence Center - Le Cercle Infra")
+# --- 3. INTERFACE UTILISATEUR ---
+st.sidebar.title("🗄️ Archives & Outils")
+archives = sorted(os.listdir("archives"), reverse=True)
+if archives:
+    selected_archive = st.sidebar.selectbox("Consulter une veille passée :", archives)
+    if st.sidebar.button("Charger l'archive"):
+        with open(f"archives/{{selected_archive}}", "r") as f:
+            st.sidebar.download_button("Télécharger cette archive", f.read(), selected_archive, "text/html")
 
-# Si on est sur le cloud, on prend la clé dans les secrets, sinon on la demande
 if "GEMINI_API_KEY" in st.secrets:
     user_api_key = st.secrets["GEMINI_API_KEY"]
 else:
-    user_api_key = st.text_input("Clé API Gemini :", type="password", value="AIzaSyBq8v1PYc6D-PqLyqIQ3tZiNSz_wRyyGMY")
+    user_api_key = st.sidebar.text_input("Clé API :", type="password")
 
-if st.button("🚀 GÉNÉRER L'ÉDITION STRATÉGIQUE", use_container_width=True, type="primary"):
-    with st.spinner("Analyse des flux internationaux et synthèse en cours..."):
-        data = recuperer_articles(FLUX_RSS)
-        if data:
-            html_body = generer_newsletter(data, user_api_key)
-            final_output = creer_html_complet(html_body)
-            st.success("Veille internationale générée !")
-            st.download_button("📥 TÉLÉCHARGER LE RAPPORT (HTML)", final_output, f"CercleInfra_Global_{datetime.date.today()}.html", "text/html")
-            st.components.v1.html(final_output, height=1200, scrolling=True)
-        else:
-            st.error("Aucune actualité n'a pu être récupérée.")
+st.title("🏛️ Intelligence Center - Le Cercle Infra")
+
+# Initialisation du brouillon dans la session
+if "draft_content" not in st.session_state:
+    st.session_state.draft_content = ""
+
+col_a, col_b = st.columns(2)
+
+with col_a:
+    if st.button("🔄 1. Générer le Brouillon IA", use_container_width=True):
+        with st.spinner("Récupération des signaux mondiaux..."):
+            articles = recuperer_articles(FLUX_RSS)
+            st.session_state.draft_content = generer_draft(articles, user_api_key)
+
+with col_b:
+    if st.session_state.draft_content:
+        st.success("Brouillon prêt pour révision.")
+
+# Zone d'édition collaborative
+if st.session_state.draft_content:
+    st.markdown("### ✍️ Mode Brouillon (Modifiez le texte ou les chiffres ici)")
+    st.session_state.draft_content = st.text_area("Éditeur HTML / Texte :", value=st.session_state.draft_content, height=500)
+    
+    if st.button("✅ 2. Valider et Apercevoir la Newsletter", use_container_width=True, type="primary"):
+        final_html = finaliser_html(st.session_state.draft_content)
+        
+        # Sauvegarde automatique en archive
+        filename = f"Veille_{datetime.date.today()}.html"
+        with open(f"archives/{{filename}}", "w") as f:
+            f.write(final_html)
+            
+        st.divider()
+        st.components.v1.html(final_html, height=800, scrolling=True)
+        st.download_button("📥 3. Télécharger le fichier final pour envoi", final_html, filename, "text/html")
