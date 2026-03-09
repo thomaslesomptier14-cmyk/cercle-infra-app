@@ -3,44 +3,43 @@ import feedparser
 from google import genai
 import datetime
 import ssl
-import urllib.parse
 import os
 
-# --- 1. CONFIGURATION (ALIGNEMENT STRICT) ---
-st.set_page_config(page_title="Le Cercle Infra - Dashboard", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION (ALIGNEMENT STRICT & SÉCURITÉ) ---
+st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
+except AttributeError: pass
+else: ssl._create_default_https_context = _create_unverified_https_context
 
-feedparser.USER_AGENT = "Mozilla/5.0 (CercleInfraBot/1.0)"
+# User-Agent renforcé pour éviter les "VIDE" sur les sites protégés
+feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. LES 20 FLUX STRATÉGIQUES ---
+# --- 2. LES 20 FLUX STRATÉGIQUES (MIS À JOUR POUR ÉVITER LES ERREURS) ---
 FLUX_RSS = [
-    "https://world-nuclear-news.org/RSS/WNN-News-Feed",
-    "https://asia.nikkei.com/rss/feed/nar",
-    "https://african.business/category/sectors/infrastructure/feed/",
-    "https://www.construction-europe.com/rss/articles",
-    "https://www.globalrailwayreview.com/feed/",
-    "https://www.waterworld.com/rss/articles",
-    "https://infrapppworld.com/feed",
-    "https://www.smart-energy.com/feed/",
-    "https://www.datacenterdynamics.com/en/feeds/news/",
-    "https://www.railwaygazette.com/139.rss",
-    "https://www.porttechnology.org/feed/",
-    "https://www.enr.com/rss/articles",
-    "https://www.power-technology.com/feed/",
-    "https://www.renewableenergyworld.com/feed/",
-    "https://www.smartcitiesworld.net/news/rss",
-    "https://www.globalconstructionreview.com/feed/",
-    "https://www.international-construction.com/rss/articles",
-    "https://www.shippingazette.com/rss/news.xml",
-    "https://www.offshore-energy.biz/feed/",
-    "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr"
+    "https://www.iaea.org/newscenter/news/rss.xml",                  # Nucléaire (IAEA - Plus robuste)
+    "https://asia.nikkei.com/rss/feed/nar",                        # Asie
+    "http://feeds.reuters.com/reuters/AFRICANews",                  # Afrique (Reuters)
+    "https://www.construction-europe.com/rss/articles",             # Construction Europe
+    "https://www.globalrailwayreview.com/feed/",                    # Rail Monde
+    "https://www.smart-energy.com/feed/",                           # Grids / Transition
+    "https://www.power-technology.com/feed/",                       # Énergie
+    "https://www.renewableenergyworld.com/feed/",                   # Renouvelables
+    "https://www.globalconstructionreview.com/feed/",               # BTP Mondial
+    "https://www.offshore-energy.biz/feed/",                        # Offshore
+    "https://www.datacenterdynamics.com/en/feeds/news/",            # Data Centers
+    "https://www.porttechnology.org/feed/",                         # Ports
+    "https://www.enr.com/rss/articles",                              # Engineering News
+    "https://www.railwaygazette.com/139.rss",                       # Rail Gazette
+    "https://infrapppworld.com/feed",                               # PPP & Finance
+    "https://www.waterworld.com/rss/articles",                      # Eau
+    "https://www.smartcitiesworld.net/news/rss",                    # Smart Cities
+    "https://www.international-construction.com/rss/articles",      # BTP International
+    "https://news.google.com/rss/search?q=infrastructure+energy+nuclear&hl=fr&gl=FR&ceid=FR:fr",
+    "https://news.google.com/rss/search?q=SMR+nuclear+reactor+deployment&hl=en&gl=US&ceid=US:en"
 ]
 
 # --- 3. RÉCUPÉRATION AVEC LOGS ---
@@ -58,51 +57,39 @@ def recuperer_articles(flux_list, max_articles=3):
                         "description": entry.description if hasattr(entry, 'description') else "",
                         "lien": entry.link
                     })
-            else: logs.append(f"⚠️ {url} VIDE")
-        except Exception as e: logs.append(f"❌ {url} ERR")
+            else:
+                logs.append(f"⚠️ {url} VIDE (Accès bloqué ou flux vide)")
+        except Exception as e:
+            logs.append(f"❌ {url} ERR : {str(e)}")
     return articles, logs
 
-# --- 4. GÉNÉRATION (PROMPT NEUTRE + BAROMÈTRE GRID) ---
+# --- 4. GÉNÉRATION (DATA-DRIVEN SANS GRAPHIQUE) ---
 def generer_newsletter(articles, api_key):
     client = genai.Client(api_key=api_key)
     ctx = "\n".join([f"ID:{i} | TITRE:{art['titre']} | DESC:{art['description']}" for i, art in enumerate(articles)])
 
+    # Prompt avec injonction de chiffres impérative
     prompt = f"""
-    Rédige la veille stratégique pour le think-tank '{NOM_ASSO}'. 
+    Rédige la veille hebdomadaire du 9 mars 2026 pour le think-tank '{NOM_ASSO}'. 
     Analyse ces news d'infrastructure : {ctx}
 
-    1. LE BAROMÈTRE (GRILLE) : Génère un conteneur <div class="barometre-grid"> contenant 4 blocs <div class="baro-card"> :
+    CONSIGNES CRITIQUES :
+    1. LE BAROMÈTRE : Tu DOIS fournir des valeurs chiffrées réalistes pour :
        - 🌿 Prix CO2 (EUA) | ⚡ Elec Spot (EU) | 🛢️ Brent ($) | 🏗️ Indice Acier.
+       AUCUN CHAMP VIDE. Format : <div class="barometre-grid"> avec 4 <div class="baro-card">.
     
-    2. LES 5 NEWS : 
-    <div class="article">
-        <div class="article-header"><span class="article-num">[N°]</span><h3 class="article-title">[Titre]</h3></div>
-        <div class="article-text">[Texte justifié avec <strong>]</div>
-        <div class="article-highlight"><strong>CHIFFRE CLÉ :</strong> [Valeur] — [Contexte]</div>
-        <a href="[LIEN]" class="source-link">SOURCE ↗</a>
-    </div>
-
-    3. DATA VIZ : [CHART_DATA: Categorie1,Valeur1|Categorie2,Valeur2|Categorie3,Valeur3]
+    2. CHIFFRES CLÉS : Chaque news choisie (01 à 05) DOIT impérativement mettre en avant un CHIFFRE CLÉ ($, %, GW, km). 
+       Sans chiffre, la news est inutile.
+    
+    3. PAS DE GRAPHIQUE à la fin. 
+    
+    4. STYLE : Professionnel, titres typo française, texte JUSTIFIÉ, <strong> pour le gras. Pas d'astérisques.
     """
     
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-    raw_html = response.text
-    
-    chart_url = "https://quickchart.io/chart?c={type:'bar',data:{labels:['A','B','C'],datasets:[{label:'Infra',data:[10,20,30],backgroundColor:'#0B1F38'}]}}"
-    if "[CHART_DATA:" in raw_html:
-        try:
-            data_part = raw_html.split("[CHART_DATA:")[1].split("]")[0]
-            items = [i.split(",") for i in data_part.split("|")]
-            labels = [i[0].strip() for i in items]; values = [i[1].strip() for i in items]
-            chart_config = f"{{type:'bar',data:{{labels:{labels},datasets:[{{label:'Analyse Sectorielle',data:[{','.join(values)}],backgroundColor:'#0B1F38'}}]}}}}"
-            chart_url = f"https://quickchart.io/chart?c={urllib.parse.quote(chart_config)}"
-            raw_html = raw_html.split("[CHART_DATA:")[0]
-        except: pass
+    return response.text
 
-    chart_html = f'<div style="text-align: center; margin: 40px 0;"><img src="{chart_url}" width="100%" style="max-width: 600px; border-radius: 8px;"></div>'
-    return raw_html + chart_html
-
-# --- 5. STYLE (VOTRE FORME EXACTE + GRID) ---
+# --- 5. STYLE (VOTRE FORME HÉRITAGE - AUCUNE MODIFICATION) ---
 def creer_html_complet(contenu_html):
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -136,34 +123,33 @@ def creer_html_complet(contenu_html):
     </div></body></html>
     """
 
-# --- 6. INTERFACE (AUCUNE CLÉ HARDCODÉE) ---
-st.title("🏛️ Cercle Infra : Production Stratégique")
+# --- 6. INTERFACE ---
+st.title("🏛️ Cercle Infra : Production Hebdomadaire")
 
-# On vérifie d'abord les secrets Streamlit
+# Récupération sécurisée
 if "GEMINI_API_KEY" in st.secrets:
     user_api_key = st.secrets["GEMINI_API_KEY"]
 else:
-    # Sinon on demande la clé (vide par défaut pour la sécurité)
     user_api_key = st.sidebar.text_input("Clé API Gemini :", type="password")
 
 if "scan_logs" not in st.session_state: st.session_state.scan_logs = []
 
 if st.button("🚀 Lancer la production", use_container_width=True):
     if not user_api_key:
-        st.error("Veuillez saisir votre clé API dans la barre latérale.")
+        st.error("Veuillez configurer votre clé API.")
     else:
-        with st.spinner("Scan mondial et analyse en cours..."):
+        with st.spinner("Scan mondial et analyse des chiffres..."):
             articles, logs = recuperer_articles(FLUX_RSS)
             st.session_state.scan_logs = logs
             if articles:
                 try:
                     html_body = generer_newsletter(articles, user_api_key)
                     final_output = creer_html_complet(html_body)
-                    st.download_button("📥 Télécharger le fichier", final_output, f"CercleInfra_Veille.html", "text/html")
+                    st.download_button("📥 Télécharger la Newsletter", final_output, f"CercleInfra_Hebdo.html", "text/html")
                     st.components.v1.html(final_output, height=1200, scrolling=True)
                 except Exception as e:
                     st.error(f"Erreur : {e}")
 
 if st.session_state.scan_logs:
-    with st.expander("📊 Rapport technique du scan"):
+    with st.expander("📊 Rapport technique du scan (Vérifiez les sources ici)"):
         for log in st.session_state.scan_logs: st.write(log)
