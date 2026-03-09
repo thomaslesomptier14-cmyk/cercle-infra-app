@@ -3,11 +3,10 @@ import feedparser
 from google import genai
 import datetime
 import ssl
-import urllib.parse
 import os
 
-# --- 1. CONFIGURATION & SSL ---
-st.set_page_config(page_title="Le Cercle Infra - Intelligence Suite", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION & DESIGN ---
+st.set_page_config(page_title="Le Cercle Infra - Dashboard", page_icon="🏛️", layout="wide")
 
 if not os.path.exists("archives"):
     os.makedirs("archives")
@@ -21,50 +20,43 @@ feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWe
 
 NOM_ASSO = "LE CERCLE INFRA"
 
-# --- 2. SOURCES (DIVERSITÉ MONDIALE) ---
+# --- 2. SOURCES MONDIALES ---
 FLUX_RSS = [
-    "https://asia.nikkei.com/rss/feed/nar", # Asie
-    "https://african.business/category/sectors/infrastructure/feed/", # Afrique
-    "https://www.construction-europe.com/rss/articles", # Europe
-    "https://www.railwaygazette.com/139.rss", # Transport Monde
+    "https://asia.nikkei.com/rss/feed/nar", 
+    "https://african.business/category/sectors/infrastructure/feed/",
+    "https://www.construction-europe.com/rss/articles",
+    "https://www.railwaygazette.com/139.rss",
     "https://news.google.com/rss/search?q=infrastructure+energy+nuclear+projects&hl=fr&gl=FR&ceid=FR:fr"
 ]
 
-# --- 3. FONCTIONS CŒUR ---
-def recuperer_articles(flux_list):
-    articles = []
-    for url in flux_list:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:6]:
-                articles.append({"titre": entry.title, "description": entry.description})
-        except: pass
-    return articles
-
+# --- 3. MOTEUR DE GÉNÉRATION ---
 def generer_brouillon(articles, api_key):
     try:
         client = genai.Client(api_key=api_key)
-        # Utilisation de votre meilleur moteur Gemini 3 Flash
-        model_id = "gemini-3-flash"
+        # On utilise 1.5 Flash pour éviter tes erreurs 429 et 404 actuelles
+        model_id = "gemini-1.5-flash"
         
         prompt = f"""
         Tu es l'analyste senior du '{NOM_ASSO}'. Rédige une veille stratégique mondiale en FRANÇAIS.
         
-        1. SECTION BAROMÈTRE : Crée un tableau HTML simple (<table class="barometre">) avec 4 indices : 
-           Prix CO2 (EUA), Électricité Spot Europe, Brent ($), Indice Acier/BTP. Propose des valeurs réalistes.
+        SECTION 1 : BAROMÈTRE STRATÉGIQUE
+        Crée un tableau HTML (<table class="barometre">) avec 4 indices : 
+        1. Prix CO2 (EUA) | 2. Électricité Spot (Europe) | 3. Brent ($) | 4. Indice Acier/Construction.
         
-        2. SECTION NEWS : Sélectionne les 5 news les plus stratégiques (Diversité Géo : Europe, Asie, Afrique, Amériques).
-           - Titres typo française, texte JUSTIFIÉ, <strong> pour le gras.
-           - CHIFFRE CLÉ obligatoire pour chaque news.
+        SECTION 2 : LES 5 NEWS CRITIQUES
+        - Sélectionne 5 news (Diversité : Asie, Afrique, Europe, Amériques).
+        - Format : Titre typo française, Analyse experte justifiée, CHIFFRE CLÉ obligatoire.
+        - Utilise <strong> pour le gras. PAS d'astérisques.
         
-        3. SECTION PERSPECTIVES : Analyse de synthèse sur la souveraineté et la transition.
+        SECTION 3 : PERSPECTIVES STRATÉGIQUES
+        Analyse de synthèse sur la souveraineté et la transition énergétique.
         """
-        
         response = client.models.generate_content(model=model_id, contents=prompt)
         return response.text
     except Exception as e:
         return f"ERREUR_API: {str(e)}"
 
+# --- 4. FORMAT VISUEL (TON STYLE PRÉFÉRÉ) ---
 def finaliser_html(corps_html):
     date_str = datetime.datetime.now().strftime('%d %b %Y')
     return f"""
@@ -89,7 +81,7 @@ def finaliser_html(corps_html):
         .source-link {{ display: inline-block; color: #0B1F38; font-weight: 700; text-decoration: none; font-size: 12px; border-bottom: 1px solid #D4AF37; }}
         .implications {{ background-color: #0B1F38; color: white; padding: 30px; border-radius: 8px; margin-top: 20px; }}
         .implications h3 {{ color: #D4AF37; margin-top: 0; text-transform: uppercase; font-size: 18px; }}
-        .implications p {{ text-align: justify; margin: 0; line-height: 1.6; }}
+        .implications p {{ text-align: justify; margin: 0; }}
         .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a365d; }}
     </style></head>
     <body><div class="container">
@@ -99,19 +91,8 @@ def finaliser_html(corps_html):
     </div></body></html>
     """
 
-# --- 4. INTERFACE ---
-st.sidebar.title("🗄️ Archives & Options")
-if st.sidebar.button("🗑️ Nouveau brouillon"):
-    st.session_state.draft = ""
-    st.rerun()
-
-archives = sorted(os.listdir("archives"), reverse=True)
-if archives:
-    selected = st.sidebar.selectbox("Consulter l'historique :", archives)
-    with open(f"archives/{selected}", "r") as f:
-        st.sidebar.download_button("📥 Télécharger cette archive", f.read(), selected, "text/html")
-
-st.title("🏛️ Cercle Infra : Production Newsletter")
+# --- 5. INTERFACE ---
+st.title("🏛️ Cercle Infra : Production Stratégique")
 
 if "GEMINI_API_KEY" in st.secrets:
     user_key = st.secrets["GEMINI_API_KEY"]
@@ -121,22 +102,19 @@ else:
 if "draft" not in st.session_state:
     st.session_state.draft = ""
 
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("🚀 1. Scan mondial & Brouillon IA", use_container_width=True):
-        with st.spinner("Analyse stratégique en cours..."):
-            articles = recuperer_articles(FLUX_RSS)
-            st.session_state.draft = generer_brouillon(articles, user_key)
+if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
+    with st.spinner("Analyse stratégique mondiale..."):
+        articles = recuperer_articles(FLUX_RSS)
+        res = generer_brouillon(articles, user_key)
+        st.session_state.draft = res
 
 if st.session_state.draft:
-    st.markdown("### ✍️ Révision Collaborative (Modifiez ici)")
+    st.markdown("### ✍️ Révision & Benchmark (Modifiez les indices ou le texte ici)")
     st.session_state.draft = st.text_area("Éditeur :", value=st.session_state.draft, height=500)
     
     if st.button("✅ 2. Valider et Finaliser", use_container_width=True, type="primary"):
         final_html = finaliser_html(st.session_state.draft)
-        filename = f"Veille_CercleInfra_{datetime.date.today()}.html"
-        with open(f"archives/{filename}", "w") as f:
-            f.write(final_html)
-        st.success("Newsletter validée et archivée !")
-        st.download_button("📥 3. Télécharger le fichier final", final_html, filename, "text/html")
+        filename = f"CercleInfra_{datetime.date.today()}.html"
+        st.success("Newsletter générée !")
+        st.download_button("📥 3. Télécharger la version finale", final_html, filename, "text/html")
         st.components.v1.html(final_html, height=1000, scrolling=True)
