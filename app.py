@@ -6,7 +6,7 @@ import datetime
 import ssl
 import os
 
-# --- 1. CONFIGURATION (ALIGNEMENT STRICT SUR TON APP.PY) ---
+# --- 1. CONFIGURATION (ALIGNEMENT STRICT) ---
 st.set_page_config(page_title="Le Cercle Infra - Hebdo", page_icon="🏛️", layout="wide")
 
 try:
@@ -88,8 +88,9 @@ def generer_brouillon_html(articles, api_key):
     except errors.ClientError as e:
         return f"ERREUR_CRITIQUE_API: {str(e)}"
 
-# --- 5. STYLE (TON CSS EXACT DE APP.PY - VERROUILLÉ) ---
+# --- 5. STYLE (TON CSS EXACT + AJOUT DATE) ---
 def creer_html_complet(contenu_html):
+    date_jour = datetime.datetime.now().strftime('%d %b %Y')
     return f"""
     <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     <style>
@@ -97,6 +98,7 @@ def creer_html_complet(contenu_html):
         .container {{ background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }}
         .header {{ background-color: #0B1F38; padding: 30px; text-align: center; border-bottom: 4px solid #D4AF37; }}
         .logo-text {{ font-size: 32px; font-weight: 800; color: #D4AF37; letter-spacing: 3px; text-transform: uppercase; margin: 0; }}
+        .date {{ font-size: 13px; font-weight: 600; color: #ffffff; text-transform: uppercase; margin-top: 8px; opacity: 0.8; letter-spacing: 1px; }}
         .content {{ padding: 40px; }}
         .barometre-grid {{ display: flex; gap: 15px; margin-bottom: 40px; justify-content: space-between; }}
         .baro-card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-top: 4px solid #D4AF37; padding: 15px; flex: 1; text-align: center; border-radius: 4px; }}
@@ -116,7 +118,7 @@ def creer_html_complet(contenu_html):
         .footer {{ background-color: #0B1F38; color: #D4AF37; text-align: center; padding: 25px; font-size: 11px; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a365d; }}
     </style></head>
     <body><div class="container">
-        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1></div>
+        <div class="header"><h1 class="logo-text">{NOM_ASSO}</h1><div class="date">Édition du {date_jour}</div></div>
         <div class="content">{contenu_html}</div>
         <div class="footer">© {datetime.datetime.now().year} {NOM_ASSO} · Diffusion restreinte</div>
     </div></body></html>
@@ -142,7 +144,7 @@ if st.button("🚀 1. Lancer le Scan & Brouillon IA", use_container_width=True):
             st.session_state.scan_logs = logs
             res = generer_brouillon_html(articles, user_api_key)
             if "ERREUR_CRITIQUE_API" in res:
-                st.error(f"L'API a rejeté la clé ou le modèle : {res}")
+                st.error(f"Erreur API : {res}")
             else:
                 st.session_state.draft = res
 
